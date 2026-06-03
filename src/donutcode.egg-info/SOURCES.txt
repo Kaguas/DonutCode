@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/donutcode/__init__.py
+src/donutcode/decoder.py
+src/donutcode/encoder.py
+src/donutcode/reedsolomon.py
+src/donutcode.egg-info/PKG-INFO
+src/donutcode.egg-info/SOURCES.txt
+src/donutcode.egg-info/dependency_links.txt
+src/donutcode.egg-info/requires.txt
+src/donutcode.egg-info/top_level.txt
+tests/test_donutcode.py

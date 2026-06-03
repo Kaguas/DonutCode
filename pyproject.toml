@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "donutcode"
+version = "0.1.0"
+description = "A custom 2D code library with a hole in the center."
+authors = [{ name = "Your Name" }]
+dependencies = [
+    "opencv-python>=4.0.0",
+    "numpy>=1.20.0",
+    "Pillow>=9.0.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
