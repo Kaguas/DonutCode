@@ -24,9 +24,9 @@ import donutcode
 # テスト用設定 
 # ==========================================
 #無駄がないパターンその1
-GRID_SIZE = 26
-HOLE_RECT = (7, 7, 11, 11)
-ECC_BYTES = 22
+GRID_SIZE = 27
+HOLE_RECT = (7, 7, 13, 13)
+ECC_BYTES = 24
 
 """
 #無駄がないパターンその2
