@@ -41,3 +41,22 @@ class _ReedSolomon:
         msg_out[:len(msg_bytes)] = list(msg_bytes)
         
         return bytes(msg_out)
+    
+    def decode(self, bit_stream, nsym):
+        # ここでは簡略化のため、エラー訂正は実装せず、単純にビットストリームをバイト列に変換して返す
+        byte_list = bytearray()
+        for i in range(0, len(bit_stream), 8):
+            byte_str = bit_stream[i:i+8]
+            if len(byte_str) < 8: break
+            
+            byte_val = int(byte_str, 2)
+            if byte_val == 0:  # 終端(Null)検知
+                break
+            byte_list.append(byte_val)
+
+        try:
+            decoded_text = byte_list.decode('utf-8')
+            return decoded_text
+        except Exception as e:
+            print(f"\n デコード失敗 (データ破損): {e}")
+            return None

@@ -3,7 +3,7 @@ import numpy as np
 from .reedsolomon import _ReedSolomon # エンコーダーに合わせてインポートを追加
 
 class Decoder:
-    def __init__(self, grid_size=21, hole_rect=(7, 7, 7, 7), ecc_bytes=15): # ecc_bytesを追加
+    def __init__(self, grid_size=21, hole_rect=(7, 7, 7, 7), ecc_bytes=24): # ecc_bytesを追加
         self.grid_size = grid_size
         self.hole_rect = hole_rect
         self.ecc_bytes = ecc_bytes
@@ -45,7 +45,7 @@ class Decoder:
             # Reed-Solomonによるエラー訂正
             decoded = self.rs.decode(byte_list, self.ecc_bytes)
             print(f"Decoded: {decoded}") # デバッグ用にデコード結果を表示
-            # 実装によって rs.decode がタプル (メッセージ, ECC) を返すか、単なるバイト列を返すかに両対応
+            
             msg_bytes = decoded[0] if isinstance(decoded, tuple) else decoded
             
             # エンコーダーでデータサイズ調整のために付与した 0x00 (Null) パディングを右側から除去
