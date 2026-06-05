@@ -41,6 +41,58 @@ class Decoder:
         M = cv2.getPerspectiveTransform(pts1, pts2)
         return cv2.warpPerspective(src_img, M, (side_length, side_length))
 
+    def _fix_orientation(self, bit_map):
+        """
+        4隅の7x7領域を、理想的なファインダーパターンのテンプレートと比較し、
+        最も一致しない角を「ファインダーの無いデータ領域（右下）」と判定する。
+        """
+        gs = self.grid_size
+        
+        # 7x7の理想的なファインダーパターン（1:黒, 0:白）
+        # これがどんな角度から見ても同じ形である性質を利用します
+        fp_template = np.array([
+            [1,1,1,1,1,1,1],
+            [1,0,0,0,0,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,1,1,1,0,1],
+            [1,0,0,0,0,0,1],
+            [1,1,1,1,1,1,1]
+        ])
+
+        # 4隅の7x7領域を正確に抽出
+        corners = {
+            'TL': bit_map[0:7, 0:7],
+            'TR': bit_map[0:7, gs-7:gs],
+            'BL': bit_map[gs-7:gs, 0:7],
+            'BR': bit_map[gs-7:gs, gs-7:gs]
+        }
+
+        # テンプレートとの一致ピクセル数（最大49）を計算
+        match_scores = {}
+        for name, corner_img in corners.items():
+            match_scores[name] = np.sum(corner_img == fp_template)
+
+        print(f" -> [回転判定] パターン一致度: TL={match_scores['TL']}/49, TR={match_scores['TR']}/49, BL={match_scores['BL']}/49, BR={match_scores['BR']}/49")
+
+        # 最も一致度が低い（スコアが最小の）角が、ファインダーがない角
+        odd_corner = min(match_scores, key=match_scores.get)
+        print(f" -> [回転判定] ファインダーの無い角は '{odd_corner}' と判定されました。")
+
+        if odd_corner == 'BR':
+            print(" -> [回転補正] 正しい向きのため回転しません。")
+        elif odd_corner == 'TR':
+            bit_map = np.rot90(bit_map, -1)  # 時計回りに90度回転
+            print(" -> [回転補正] 時計回りに90度回転させました。")
+        elif odd_corner == 'TL':
+            bit_map = np.rot90(bit_map, 2)   # 180度回転
+            print(" -> [回転補正] 180度回転させました。")
+        elif odd_corner == 'BL':
+            bit_map = np.rot90(bit_map, 1)   # 反時計回りに90度回転
+            print(" -> [回転補正] 反時計回りに90度回転させました。")
+
+        return bit_map
+
     def image_to_bitmap(self, square_img):
         if len(square_img.shape) == 3:
             gray = cv2.cvtColor(square_img, cv2.COLOR_BGR2GRAY)
@@ -63,7 +115,8 @@ class Decoder:
                 else:
                     bit_map[row, col] = 0
 
-        return bit_map
+        # サンプリング完了後に回転補正をかける
+        return self._fix_orientation(bit_map)
 
     def _decode_from_bit_map(self, bit_map):
         available_cells = []
@@ -82,32 +135,24 @@ class Decoder:
                 byte_val = (byte_val << 1) | bit_stream[i + j]
             byte_list.append(byte_val)
 
-        # 【追加】エンコーダーが余白を埋めたゼロパディングを取り除く
         stripped_byte_list = bytearray(byte_list)
         while len(stripped_byte_list) > self.ecc_bytes and stripped_byte_list[-1] == 0:
             stripped_byte_list.pop()
 
         try:
-            # 正規のReed-Solomonエラー訂正ルート
             decoded = self.rs.decode(stripped_byte_list, self.ecc_bytes)
             msg_bytes = decoded[0] if isinstance(decoded, tuple) else decoded
             msg_bytes = bytes(msg_bytes).rstrip(b'\x00')
             return msg_bytes.decode('utf-8', errors='ignore')
             
         except Exception as e:
-            print(f"⚠️ Reed-Solomon エラー訂正に失敗しました: {e}")
-            print(" -> [フォールバック] 生データの直接抽出を試みます...")
-            
-            # 【追加】エラー訂正なしのフォールバックルート（以前成功したロジック）
             raw_bytes = bytearray()
             for b in byte_list:
-                if b == 0: break  # Null(終端)検知でストップ
+                if b == 0: break
                 raw_bytes.append(b)
-                
             try:
                 return raw_bytes.decode('utf-8', errors='ignore')
-            except Exception as e2:
-                print(f"❌ フォールバック抽出にも失敗しました: {e2}")
+            except:
                 return None 
 
     def decode_image(self, img_path):
@@ -118,13 +163,21 @@ class Decoder:
         gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
-        coords = cv2.findNonZero(thresh)
-        if coords is None:
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
             return []
 
-        rect = cv2.minAreaRect(coords)
-        box = cv2.boxPoints(rect)
-        box = np.int32(box)
+        largest_contour = max(contours, key=cv2.contourArea)
+        pts = largest_contour.reshape(-1, 2)
+        
+        s = pts.sum(axis=1)
+        diff = np.diff(pts, axis=1)
+        
+        box = np.zeros((4, 2), dtype="float32")
+        box[0] = pts[np.argmin(s)]
+        box[1] = pts[np.argmin(diff)]
+        box[2] = pts[np.argmax(s)]
+        box[3] = pts[np.argmax(diff)]
 
         square_img = self.warp_to_square(src_img, box, side_length=500)
         bit_map = self.image_to_bitmap(square_img)

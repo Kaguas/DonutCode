@@ -76,6 +76,11 @@ def main():
         ecc_bytes=ECC_BYTES
     )
 
+    print(" -> 画像の読み込みに成功しました。デコード処理を開始します...")
+    direct_decode = decoder.decode_image(OUTPUT_IMAGE)
+    print(f" -> decode_image() の直接呼び出し結果: {direct_decode}")
+
+
     # --- STEP A: 領域検出 ---
     gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY)
     _, thresh_inv = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
