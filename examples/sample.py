@@ -173,6 +173,17 @@ def main():
             if _is_hole(col, row, HOLE_RECT): continue
             bit_stream += str(bit_map[row, col])
 
+    print(f"\nBit stream length: {len(bit_stream)} bits.type: {type(bit_stream)}") # デバッグ用にビットストリームの長さと型を表示
+    
+    decoded_text = None
+    decoder = donutcode.Decoder(grid_size=GRID_SIZE, hole_rect=HOLE_RECT, ecc_bytes=ECC_BYTES)
+    try:
+        decoded_text = decoder._decode_from_bit_map(bit_map)
+    except Exception as e:
+        print(f"❌ デコード中にエラーが発生しました: {e}")
+        return
+    """
+    
     byte_list = bytearray()
     for i in range(0, len(bit_stream), 8):
         byte_str = bit_stream[i:i+8]
@@ -182,7 +193,7 @@ def main():
         if byte_val == 0:  # 終端(Null)検知
             break
         byte_list.append(byte_val)
-
+    """
     try:
         decoded_text = byte_list.decode('utf-8')
         print(f"\n🎉 最終デコード成功！ 復元されたデータ: 【 {decoded_text} 】")

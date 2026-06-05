@@ -29,7 +29,7 @@ class Decoder:
                 available_cells.append((x, y))
 
         # ビットストリームの再構築
-        bit_stream = [bit_map[y, x] for x, y in available_cells]
+        bit_stream = [str(bit_map[y, x]) for x, y in available_cells]
 
         print(f"Bit stream: {bit_stream}") # デバッグ用にビットストリームを表示
 
@@ -45,7 +45,7 @@ class Decoder:
             # Reed-Solomonによるエラー訂正
             decoded = self.rs.decode(byte_list, self.ecc_bytes)
             print(f"Decoded: {decoded}") # デバッグ用にデコード結果を表示
-            
+
             msg_bytes = decoded[0] if isinstance(decoded, tuple) else decoded
             
             # エンコーダーでデータサイズ調整のために付与した 0x00 (Null) パディングを右側から除去
