@@ -48,14 +48,15 @@ class _ReedSolomon:
         for i in range(0, len(bit_stream), 8):
             byte_str = bit_stream[i:i+8]
             if len(byte_str) < 8: break
-            
+            print("1")
             byte_val = int(byte_str, 2)
+            print(f"2: {byte_val}")
             if byte_val == 0:  # 終端(Null)検知
                 break
             byte_list.append(byte_val)
 
         try:
-            decoded_text = byte_list.decode('utf-8')
+            decoded_text = byte_list.decode('ascii')
             return decoded_text
         except Exception as e:
             print(f"\n デコード失敗 (データ破損): {e}")
