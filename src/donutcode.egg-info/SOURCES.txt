@@ -9,4 +9,3 @@ src/donutcode.egg-info/SOURCES.txt
 src/donutcode.egg-info/dependency_links.txt
 src/donutcode.egg-info/requires.txt
 src/donutcode.egg-info/top_level.txt
-tests/test_donutcode.py

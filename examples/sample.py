@@ -35,7 +35,7 @@ HOLE_RECT = (7, 7, 13, 13)
 ECC_BYTES = 29
 """
 # 小数点4桁（11メートル精度）にしています。
-TEST_MESSAGE = "loc:34.2335,133.6387"
+TEST_MESSAGE = "34.2335,133.6387"
 OUTPUT_DIR = "sample-result"
 OUTPUT_IMAGE = os.path.join(OUTPUT_DIR, "test_fresh_donut.png")
 
@@ -47,10 +47,10 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # デバッグ用補助関数
 # ==========================================
 def _is_reserved_pattern(col, row, grid_size):
-    # 3隅のファインダーパターン (7x7)
-    if 0 <= col < 7 and 0 <= row < 7: return True
-    if grid_size - 7 <= col < grid_size and 0 <= row < 7: return True
-    if 0 <= col < 7 and grid_size - 7 <= row < grid_size: return True
+    # 3隅のファインダーパターン (8x8)
+    if 0 <= col < 8 and 0 <= row < 8: return True
+    if grid_size - 8 <= col < grid_size and 0 <= row < 8: return True
+    if 0 <= col < 8 and grid_size - 8 <= row < grid_size: return True
     # 右下のアライメントアンカー (3x3)
     if grid_size - 3 <= col < grid_size and grid_size - 3 <= row < grid_size: return True
     return False
