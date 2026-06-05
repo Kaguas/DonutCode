@@ -71,7 +71,7 @@ class Encoder:
         if data_bytes_len <= 0:
             raise ValueError(f"エラー訂正({self.ecc_bytes}B)に対してデータ領域({max_bytes}B)が小さすぎます。")
 
-        msg_bytes = data_str.encode('utf-8', errors='ignore')
+        msg_bytes = data_str.encode('ascii', errors='ignore')
         if len(msg_bytes) > data_bytes_len:
             raise ValueError(f"データが長すぎます。最大 {data_bytes_len} バイトまでです。")
         else:

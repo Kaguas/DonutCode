@@ -35,7 +35,7 @@ HOLE_RECT = (7, 7, 13, 13)
 ECC_BYTES = 29
 """
 # 小数点4桁（11メートル精度）にしています。
-TEST_MESSAGE = "34.2335,133.6387"
+TEST_MESSAGE = "134.2335,133.6387"
 OUTPUT_DIR = "sample-result"
 OUTPUT_IMAGE = os.path.join(OUTPUT_DIR, "test_fresh_donut.png")
 

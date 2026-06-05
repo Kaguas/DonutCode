@@ -49,7 +49,7 @@ class Decoder:
             # エンコーダーでデータサイズ調整のために付与した 0x00 (Null) パディングを右側から除去
             msg_bytes = msg_bytes.rstrip(b'\x00')
             
-            return msg_bytes.decode('utf-8')
+            return msg_bytes.decode('ascii')
         except Exception as e:
             # エラー訂正の限界を超えている、またはノイズが多すぎる場合
             # print(f"Decode error: {e}") # 必要に応じてデバッグ出力
