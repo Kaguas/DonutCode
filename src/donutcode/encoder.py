@@ -90,14 +90,14 @@ class Encoder:
 
         return matrix
 
-    def save_image(self, matrix, filename, scale=20, hole_color="white"):
+    def save_image(self, matrix, filename, scale=20, hole_color="white",padding=20):
         size = self.grid_size
-        img = Image.new("RGB", (size * scale, size * scale), "white")
+        img = Image.new("RGB", (size * scale + 2 * padding, size * scale + 2 * padding), "white")
         draw = ImageDraw.Draw(img)
         for y in range(size):
             for x in range(size):
                 val = matrix[y][x]
-                box = [x * scale, y * scale, (x + 1) * scale, (y + 1) * scale]
+                box = [x * scale + padding, y * scale + padding, (x + 1) * scale + padding, (y + 1) * scale + padding]
                 if val == 1:
                     draw.rectangle(box, fill="black")
                 elif val == 0:
