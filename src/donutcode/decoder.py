@@ -31,6 +31,8 @@ class Decoder:
         # ビットストリームの再構築
         bit_stream = [bit_map[y, x] for x, y in available_cells]
 
+        print(f"Bit stream: {bit_stream}") # デバッグ用にビットストリームを表示
+
         # ビットをバイト配列に変換
         byte_list = bytearray()
         for i in range(0, len(bit_stream) - 7, 8):
@@ -42,7 +44,7 @@ class Decoder:
         try:
             # Reed-Solomonによるエラー訂正
             decoded = self.rs.decode(byte_list, self.ecc_bytes)
-            
+            print(f"Decoded: {decoded}") # デバッグ用にデコード結果を表示
             # 実装によって rs.decode がタプル (メッセージ, ECC) を返すか、単なるバイト列を返すかに両対応
             msg_bytes = decoded[0] if isinstance(decoded, tuple) else decoded
             
@@ -52,7 +54,7 @@ class Decoder:
             return msg_bytes.decode('ascii')
         except Exception as e:
             # エラー訂正の限界を超えている、またはノイズが多すぎる場合
-            # print(f"Decode error: {e}") # 必要に応じてデバッグ出力
+            print(f"Decode error: {e}") # 必要に応じてデバッグ出力
             return None 
 
     def _order_points(self, pts):
