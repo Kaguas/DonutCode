@@ -1,1 +1,7 @@
+# テスト環境
 .venv/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
