@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: donutcode
-Version: 0.1.0
+Version: 0.1.1
 Summary: A custom 2D code library with a hole in the center.
 Author: Your Name
 Requires-Dist: opencv-python>=4.0.0
