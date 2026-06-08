@@ -21,7 +21,7 @@ class Encoder:
                 x = ox + dx
                 y = oy + dy
                 
-                # 【重要】Pythonは -1 を指定すると末尾を書き換えてしまうため、必ず範囲チェックを行う
+                # Pythonは -1 を指定すると末尾を書き換えてしまうため、必ず範囲チェックを行う
                 if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
                     # 1層目(最外周): セパレータ (白:0)
                     if dx == 0 or dx == 8 or dy == 0 or dy == 8:
