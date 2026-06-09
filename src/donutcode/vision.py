@@ -3,6 +3,16 @@ import cv2
 import numpy as np
 import os
 
+"""DonutCodeの画像処理モジュール
+このモジュールは、DonutCodeの画像からコード領域を検出して、透視変換を行うためのクラスを提供します。
+主な機能:
+- ファインダパタンの検出と位置特定
+- 透視変換によるコード領域の正規化
+- pyzbarはラインでの走査をしているがPYTHONの実行速度的にここで実装するのは無理があるので、
+- 複数画像を並列処理することでロバスト性を上げる。
+- フォールバックロジックによる頑健な検出
+"""
+
 class VisionProcessor:
     def __init__(self, config=None, target_side=500):
         self.config = config
@@ -97,6 +107,7 @@ class VisionProcessor:
         valid_contours = []
         if hierarchy is None: return centers, valid_contours
 
+        # ファインダ検出ロジックは旧バージョンの堅牢な実装を維持
         for i in range(len(contours)):
             c1_idx = hierarchy[0][i][2]
             if c1_idx != -1:
@@ -121,7 +132,7 @@ class VisionProcessor:
         return centers, valid_contours
 
     # =======================================================
-    # process メソッド
+    # process メソッド (デバッグモード追加)
     # =======================================================
     def process(self, img_path, debug_mode=False):
         img = cv2.imread(img_path)
@@ -179,7 +190,7 @@ class VisionProcessor:
         estimated_BR = TR + BL - TL
 
         # =======================================================
-        # アライメントパターンの高精度探索（白四角ベース）
+        # 【修正】アライメントパターンの高精度探索（白四角ベース）
         # =======================================================
         actual_alignment = None
         if best_contours is not None and best_hierarchy is not None and self.config and hasattr(self.config, 'ALIGNMENT_POS') and self.config.ALIGNMENT_POS:
@@ -226,25 +237,31 @@ class VisionProcessor:
                     best_cand = min(with_child, key=lambda x: x['dist'])
                     actual_alignment = best_cand['pos']
                 else:
-                    # 潰れてしまって子要素が見えない場合でも、一番近い四角形にフォールバック
+                    # 見つからなかった場合でも一番近い四角形にフォールバック
                     best_cand = min(candidates, key=lambda x: x['dist'])
                     actual_alignment = best_cand['pos']
 
         gs, ts = self.grid_size, self.target_side
 
+        # =======================================================
+        # デバッグ画像の描画と保存 (debug_mode=True の時のみ)
+        # =======================================================
         if debug_mode:
             os.makedirs("sample-result/debug", exist_ok=True)
             base_name = os.path.basename(img_path).replace(".png", "")
             debug_img = img.copy()
             
+            # TL(赤), TR(緑), BL(青)
             cv2.circle(debug_img, tuple(map(int, TL)), 3, (0, 0, 255), -1)
             cv2.circle(debug_img, tuple(map(int, TR)), 3, (0, 255, 0), -1)
             cv2.circle(debug_img, tuple(map(int, BL)), 3, (255, 0, 0), -1)
             
             if actual_alignment:
+                # アライメント発見(マゼンタ)
                 cv2.circle(debug_img, tuple(map(int, actual_alignment)), 3, (255, 0, 255), -1)
                 cv2.polylines(debug_img, [np.int32([TL, TR, actual_alignment, BL])], True, (0, 255, 255), 1)
             else:
+                # 推測BR(水色)
                 cv2.circle(debug_img, tuple(map(int, estimated_BR)), 3, (255, 255, 0), -1)
                 cv2.polylines(debug_img, [np.int32([TL, TR, estimated_BR, BL])], True, (0, 255, 255), 1)
                 
