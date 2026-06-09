@@ -14,16 +14,9 @@ class VisionProcessor:
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-        # 画像サイズから、ファインダがすっぽり入るブロックサイズを動的計算
-        min_dim = min(gray.shape[0], gray.shape[1])
-        block_size = int((min_dim / self.grid_size) * 8)
-        block_size = block_size if block_size % 2 == 1 else block_size + 1
-        block_size = max(31, min(block_size, 55)) # 31〜55の奇数に制限
-
-        thresh = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY_INV, block_size, 10
-        )
+        # 【修正点1】キャンバスサイズに依存する適応的閾値をやめ、大津の二値化を採用
+        # 背景とコードのコントラストから自動的に最適な閾値を計算します
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
 
         contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         
