@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "donutcode"
-version = "1.0.0"
+version = "1.1.1"
 description = "A custom 2D code library with a hole in the center."
 authors = [{ name = "Hiroaki Kaji" }]
 dependencies = [
