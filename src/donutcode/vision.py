@@ -134,9 +134,14 @@ class VisionProcessor:
     # =======================================================
     # process メソッド (デバッグモード追加)
     # =======================================================
-    def process(self, img_path, debug_mode=False):
-        img = cv2.imread(img_path)
-        if img is None: raise FileNotFoundError(f"画像 '{img_path}' が読み込めません。")
+    def process(self, img_path: str|np.ndarray, debug_mode=False):
+        #!#!# 文字列とnumpy array両方に対応
+        if type(img_path) == str:
+            img = cv2.imread(img_path)
+        else:
+            img = img_path
+        if img is None:
+            raise FileNotFoundError(f"画像 '{img_path}' が読み込めません。")
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
         thresh1 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 5)
