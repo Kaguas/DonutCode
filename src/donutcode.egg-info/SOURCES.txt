@@ -2,7 +2,6 @@ README.md
 pyproject.toml
 src/donutcode/__init__.py
 src/donutcode/config.py
-src/donutcode/decoder-bg.py
 src/donutcode/decoder.py
 src/donutcode/encoder.py
 src/donutcode/reedsolomon.py

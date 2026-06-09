@@ -1,5 +1,6 @@
 # テスト環境
 .venv/
+pyzbar-hikaku/
 
 # Python cache files
 __pycache__/

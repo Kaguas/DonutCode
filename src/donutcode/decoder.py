@@ -10,7 +10,7 @@ class Decoder:
         self.config = get_config(config_type)
         self.grid_size = self.config.GRID_SIZE
         self.rs = _ReedSolomon()
-        self.vision = VisionProcessor(target_side=500)
+        self.vision = VisionProcessor(config=self.config)
 
     def _fix_orientation(self, bit_map):
         """ファインダパタンの位置から画像の正しい向きを判定して回転を補正する"""
