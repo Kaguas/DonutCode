@@ -5,7 +5,7 @@ class Config_D_27_13:
     ECC_BYTES = 24  # データエリアが小さいため、ECCは多めに取る
 
     # アライメントパターンの左上座標
-    ALIGNMENT_POS = (20, 20)
+    ALIGNMENT_POS = (21, 21)
 
     # 文字数エリア(8ビット)の座標リスト (MSB -> LSBの順)
     CHAR_COUNT_COORDS = [(x, y) for y in range(8, 10) for x in range(4)]
