@@ -100,9 +100,9 @@ class VisionProcessor:
         for i in range(len(contours)):
             c1_idx = hierarchy[0][i][2]
             if c1_idx != -1:
-                c2_idx = hierarchy[0][c1_idx][2] # 孫要素（一番内側の黒四角）
+                c2_idx = hierarchy[0][c1_idx][2]
                 if c2_idx != -1:
-                    c = contours[i] # 親要素（一番外側の黒枠）
+                    c = contours[i]
                     if cv2.contourArea(c) < 50: continue
                     
                     rect = cv2.minAreaRect(c)
@@ -112,18 +112,16 @@ class VisionProcessor:
 
                     is_valid = (aspect_ratio < 1.3) if strict_mode else (aspect_ratio < 2.0)
                     if is_valid:
-                        # 【修正点】外側の輪郭(c)ではなく、一番内側の輪郭(c2_idx)から中心を計算する
-                        inner_c = contours[c2_idx]
-                        M = cv2.moments(inner_c)
+                        M = cv2.moments(c)
                         if M["m00"] != 0:
                             cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
                             if not any(np.hypot(cx - ex, cy - ey) < 15 for ex, ey in centers):
                                 centers.append([cx, cy])
-                                valid_contours.append(c) # 描画等のために外枠自体は保持しておく
+                                valid_contours.append(c)
         return centers, valid_contours
 
     # =======================================================
-    # メインの画像処理プロセス
+    # process メソッド
     # =======================================================
     def process(self, img_path, debug_mode=False):
         img = cv2.imread(img_path)
@@ -137,7 +135,7 @@ class VisionProcessor:
 
         best_centers = None
         best_contours = None
-        best_hierarchy = None # 階層構造も保持するように追加
+        best_hierarchy = None # 階層構造も保持
         
         for name, thresh in thresholds:
             contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -181,7 +179,7 @@ class VisionProcessor:
         estimated_BR = TR + BL - TL
 
         # =======================================================
-        # アライメント補正 (内側黒四角の中心を取得するよう修正)
+        # アライメントパターンの高精度探索（白四角ベース）
         # =======================================================
         actual_alignment = None
         if best_contours is not None and best_hierarchy is not None and self.config and hasattr(self.config, 'ALIGNMENT_POS') and self.config.ALIGNMENT_POS:
@@ -190,29 +188,50 @@ class VisionProcessor:
             cell_size_px = ((dist_x_px + dist_y_px) / 2.0) / (self.grid_size - 7)
             search_radius = cell_size_px * 4 
 
+            candidates = []
             for i in range(len(best_contours)):
-                c1_idx = best_hierarchy[0][i][2]
-                if c1_idx != -1:
-                    c2_idx = best_hierarchy[0][c1_idx][2] # 孫要素（一番内側の黒四角）
-                    if c2_idx != -1:
-                        inner_contour = best_contours[c2_idx]
-                        M = cv2.moments(inner_contour)
-                        if M["m00"] != 0:
-                            cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
-                            # 推定BR座標に近いかチェック
-                            if np.hypot(cx - estimated_BR[0], cy - estimated_BR[1]) < search_radius:
-                                # ファインダパターン自身を誤検知しないよう除外
-                                if (np.hypot(cx - TL[0], cy - TL[1]) > search_radius and
-                                    np.hypot(cx - TR[0], cy - TR[1]) > search_radius and
-                                    np.hypot(cx - BL[0], cy - BL[1]) > search_radius):
-                                    actual_alignment = [cx, cy]
-                                    break
+                c = best_contours[i]
+                M = cv2.moments(c)
+                if M["m00"] == 0: continue
+                
+                cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
+                dist = np.hypot(cx - estimated_BR[0], cy - estimated_BR[1])
+                
+                if dist < search_radius:
+                    # ファインダパターン自身を除外
+                    if (np.hypot(cx - TL[0], cy - TL[1]) > search_radius and
+                        np.hypot(cx - TR[0], cy - TR[1]) > search_radius and
+                        np.hypot(cx - BL[0], cy - BL[1]) > search_radius):
+                        
+                        # 形状がほぼ正方形かチェック
+                        rect = cv2.minAreaRect(c)
+                        w, h = rect[1]
+                        if w == 0 or h == 0: continue
+                        aspect_ratio = max(w, h) / min(w, h)
+                        
+                        if aspect_ratio < 1.5:
+                            # 階層構造チェック：子要素（内側の黒四角）を持っているか？
+                            # 白四角は穴（hole）なので、中に黒四角があれば has_child が True になる
+                            has_child = best_hierarchy[0][i][2] != -1
+                            candidates.append({
+                                'pos': [cx, cy],
+                                'dist': dist,
+                                'has_child': has_child
+                            })
+            
+            if candidates:
+                # 「子要素（内側黒四角）を持つ白四角」を最優先で選ぶ
+                with_child = [cand for cand in candidates if cand['has_child']]
+                if with_child:
+                    best_cand = min(with_child, key=lambda x: x['dist'])
+                    actual_alignment = best_cand['pos']
+                else:
+                    # 潰れてしまって子要素が見えない場合でも、一番近い四角形にフォールバック
+                    best_cand = min(candidates, key=lambda x: x['dist'])
+                    actual_alignment = best_cand['pos']
 
         gs, ts = self.grid_size, self.target_side
 
-        # =======================================================
-        # デバッグ画像の描画と保存 (debug_mode=True の時のみ)
-        # =======================================================
         if debug_mode:
             os.makedirs("sample-result/debug", exist_ok=True)
             base_name = os.path.basename(img_path).replace(".png", "")
