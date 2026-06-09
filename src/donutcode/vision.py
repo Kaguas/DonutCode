@@ -7,18 +7,18 @@ import numpy as np
 主な機能:
 - ファインダパタンの検出と位置特定
 - 透視変換によるコード領域の正規化
+- pyzbarはラインでの走査をしているがPYTHONの実行速度的にここで実装するのは無理があるので、複数画像を並列処理することでロバスト性を上げる。
 - フォールバックロジックによる頑健な検出
 """
 
 class VisionProcessor:
     def __init__(self, config=None, target_side=500):
         self.config = config
-        # configが渡されなかった場合のフォールバック
         self.grid_size = config.GRID_SIZE if config else 27
         self.target_side = target_side
 
     def _get_finder_candidates(self, contours, hierarchy, strict_mode=True):
-        """階層構造からファインダ候補を抽出する関数（正方形判定付き）"""
+        """階層構造とアスペクト比からファインダ候補を抽出する"""
         centers = []
         valid_contours = []
         
@@ -33,25 +33,20 @@ class VisionProcessor:
                     c = contours[i]
                     area = cv2.contourArea(c)
                     
-                    # 極端に小さいノイズは無条件で弾く
                     if area < 50:
                         continue
                     
-                    # 形状判定（アスペクト比）
                     rect = cv2.minAreaRect(c)
                     w, h = rect[1]
                     if w == 0 or h == 0:
                         continue
                     aspect_ratio = max(w, h) / min(w, h)
 
-                    # モードによる条件分岐
                     is_valid_shape = False
                     if strict_mode:
-                        # 厳格モード: ほぼ正方形 (1.0〜1.3倍以内)
                         if aspect_ratio < 1.3:
                             is_valid_shape = True
                     else:
-                        # 緩和モード: 多少歪んでいても許容 (1.0〜2.0倍以内)
                         if aspect_ratio < 2.0:
                             is_valid_shape = True
 
@@ -60,7 +55,6 @@ class VisionProcessor:
                         if M["m00"] != 0:
                             cx = M["m10"] / M["m00"]
                             cy = M["m01"] / M["m00"]
-                            # 重複検出の防止
                             if not any(np.hypot(cx - ex, cy - ey) < 15 for ex, ey in centers):
                                 centers.append([cx, cy])
                                 valid_contours.append(c)
@@ -74,36 +68,56 @@ class VisionProcessor:
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         
-        # 二値化 (SAM環境・ごちゃごちゃ背景で実績のあるパラメータ)
-        thresh = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY_INV, 21, 5
-        )
-
-        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-
         # ==========================================
-        # 3段構えのフォールバック・ロジック (Tier 1 ~ 3)
+        # マルチ・スレッショルド（多重閾値）の生成
         # ==========================================
-        print(" -> [Vision] [Tier 1] 厳格なファインダ探索を実行中...")
-        centers, valid_contours = self._get_finder_candidates(contours, hierarchy, strict_mode=True)
+        # 1. Base Adaptive: 局所的なノイズに強い（これまでの最適解）
+        thresh1 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 21, 5)
         
-        if len(centers) >= 3:
-            print(f" -> [Vision] [Tier 1] 成功！ {len(centers)}個のファインダを発見しました。")
-            pts = np.array(centers[:3], dtype=np.float32)
-        else:
-            print(" -> [Vision] [Tier 1] 失敗。")
-            print(" -> [Vision] [Tier 2] 条件を緩和してファインダ探索を実行中...")
-            centers, valid_contours = self._get_finder_candidates(contours, hierarchy, strict_mode=False)
-            
-            if len(centers) >= 3:
-                print(f" -> [Vision] [Tier 2] 成功！ {len(centers)}個のファインダを発見しました。")
-                pts = np.array(centers[:3], dtype=np.float32)
-            else:
-                print(" -> [Vision] [Tier 2] 失敗。ファインダが3つ見つかりません。")
-                return self._fallback_crop(img, thresh)
+        # 2. Wide Adaptive: ブロックサイズが大きく、大きなノイズや影のグラデーションに強い
+        thresh2 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 41, 5)
+        
+        # 3. OTSU: 背景と紙のコントラストがはっきりしている環境光下で最強
+        _, thresh3 = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
 
-        # --- Tier 1 か Tier 2 で成功した場合の幾何学計算 ---
+        thresholds = [
+            ("Adaptive-21", thresh1),
+            ("Adaptive-41", thresh2),
+            ("OTSU", thresh3)
+        ]
+
+        best_centers = None
+        best_contours = None
+        
+        # 3種類の閾値画像を順番にテスト（どれか1つでも通れば勝ち）
+        for name, thresh in thresholds:
+            contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+            # [Tier 1] 厳格探索
+            centers, valid_contours = self._get_finder_candidates(contours, hierarchy, strict_mode=True)
+            if len(centers) >= 3:
+                # print(f" -> [Vision] [{name}] Tier 1 (厳格) でファインダ発見！") # ログが多すぎる場合はコメントアウト推奨
+                best_centers = centers
+                best_contours = contours
+                break
+                
+            # [Tier 2] 緩和探索
+            centers, valid_contours = self._get_finder_candidates(contours, hierarchy, strict_mode=False)
+            if len(centers) >= 3:
+                # print(f" -> [Vision] [{name}] Tier 2 (緩和) でファインダ発見！")
+                best_centers = centers
+                best_contours = contours
+                break
+
+        # ==========================================
+        # 幾何学計算とフォールバック
+        # ==========================================
+        if not best_centers or len(best_centers) < 3:
+            # print(" -> [Vision] 全閾値でファインダ検出に失敗。全体矩形フォールバックへ移行します。")
+            return self._fallback_crop(img, thresh1) # 最も標準的なthresh1をベースに切り抜く
+
+        pts = np.array(best_centers[:3], dtype=np.float32)
+
         d01 = np.linalg.norm(pts[0] - pts[1])
         d12 = np.linalg.norm(pts[1] - pts[2])
         d02 = np.linalg.norm(pts[0] - pts[2])
@@ -126,8 +140,6 @@ class VisionProcessor:
         # アライメントパターンの探索（高精度化）
         # =========================================================
         actual_alignment = None
-        
-        # 探索のためにセルサイズを概算
         dist_x_px = np.linalg.norm(TR - TL)
         dist_y_px = np.linalg.norm(BL - TL)
         cells_between = self.grid_size - 7
@@ -135,13 +147,12 @@ class VisionProcessor:
 
         if self.config and hasattr(self.config, 'ALIGNMENT_POS') and self.config.ALIGNMENT_POS:
             search_radius = cell_size_px * 4 
-            for c in contours:
+            for c in best_contours:
                 M = cv2.moments(c)
                 if M["m00"] != 0:
                     cx = M["m10"] / M["m00"]
                     cy = M["m01"] / M["m00"]
                     if np.hypot(cx - estimated_BR[0], cy - estimated_BR[1]) < search_radius:
-                        # ファインダ自身の誤検知を除外
                         if (np.hypot(cx - TL[0], cy - TL[1]) > search_radius and
                             np.hypot(cx - TR[0], cy - TR[1]) > search_radius and
                             np.hypot(cx - BL[0], cy - BL[1]) > search_radius):
@@ -155,7 +166,6 @@ class VisionProcessor:
         ts = self.target_side
 
         if actual_alignment:
-            print(" -> [Vision] アライメントパターンを発見。4点高精度補正を行います。")
             ax, ay = self.config.ALIGNMENT_POS
             a_center_x = ax + 2.5
             a_center_y = ay + 2.5
@@ -168,7 +178,6 @@ class VisionProcessor:
                 [a_center_x * (ts / gs), a_center_y * (ts / gs)]
             ])
         else:
-            print(" -> [Vision] アライメント未検出。3点+推測座標で補正します。")
             src_pts = np.float32([TL, TR, BL, estimated_BR])
             dst_pts = np.float32([
                 [3.5 * (ts / gs), 3.5 * (ts / gs)],
@@ -184,7 +193,6 @@ class VisionProcessor:
 
     def _fallback_crop(self, img, thresh):
         """【Tier 3】最終手段：全体矩形からの切り出し"""
-        print(" -> [Vision] [Tier 3] 全体の矩形探索モードを実行します。")
         kernel = np.ones((5,5), np.uint8)
         closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
         
