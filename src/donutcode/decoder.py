@@ -116,6 +116,10 @@ class Decoder:
         return data_bytes.rstrip(b'\x00').decode('ascii', errors='ignore')
     
     def decode_image(self, img_path):
-        square_img = self.vision.process(img_path,debug_mode=True)
-        bit_map = self.image_to_bitmap(square_img)
-        return self._decode_from_bit_map(bit_map)
+        try:
+            square_img = self.vision.process(img_path, debug_mode=True)
+            bit_map = self.image_to_bitmap(square_img)
+            return self._decode_from_bit_map(bit_map)
+        except Exception as e:
+            print(f"[エラー] 画像デコード失敗: {e}")
+            return None
