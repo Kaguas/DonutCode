@@ -6,3 +6,4 @@ pyzbar-hikaku/
 __pycache__/
 *.py[cod]
 *$py.class
+src/donutcode.egg-info/
