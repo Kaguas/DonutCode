@@ -100,9 +100,9 @@ class VisionProcessor:
         for i in range(len(contours)):
             c1_idx = hierarchy[0][i][2]
             if c1_idx != -1:
-                c2_idx = hierarchy[0][c1_idx][2]
+                c2_idx = hierarchy[0][c1_idx][2] # 孫要素（一番内側の黒四角）
                 if c2_idx != -1:
-                    c = contours[i]
+                    c = contours[i] # 親要素（一番外側の黒枠）
                     if cv2.contourArea(c) < 50: continue
                     
                     rect = cv2.minAreaRect(c)
@@ -112,16 +112,18 @@ class VisionProcessor:
 
                     is_valid = (aspect_ratio < 1.3) if strict_mode else (aspect_ratio < 2.0)
                     if is_valid:
-                        M = cv2.moments(c)
+                        # 【修正点】外側の輪郭(c)ではなく、一番内側の輪郭(c2_idx)から中心を計算する
+                        inner_c = contours[c2_idx]
+                        M = cv2.moments(inner_c)
                         if M["m00"] != 0:
                             cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
                             if not any(np.hypot(cx - ex, cy - ey) < 15 for ex, ey in centers):
                                 centers.append([cx, cy])
-                                valid_contours.append(c)
+                                valid_contours.append(c) # 描画等のために外枠自体は保持しておく
         return centers, valid_contours
 
     # =======================================================
-    # process メソッドに debug_mode を追加
+    # メインの画像処理プロセス
     # =======================================================
     def process(self, img_path, debug_mode=False):
         img = cv2.imread(img_path)
@@ -135,16 +137,17 @@ class VisionProcessor:
 
         best_centers = None
         best_contours = None
+        best_hierarchy = None # 階層構造も保持するように追加
         
         for name, thresh in thresholds:
             contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
             centers, valid_contours = self._get_finder_candidates(contours, hierarchy, strict_mode=True)
             if len(centers) >= 3:
-                best_centers, best_contours = centers, contours
+                best_centers, best_contours, best_hierarchy = centers, contours, hierarchy
                 break
             centers, valid_contours = self._get_finder_candidates(contours, hierarchy, strict_mode=False)
             if len(centers) >= 3:
-                best_centers, best_contours = centers, contours
+                best_centers, best_contours, best_hierarchy = centers, contours, hierarchy
                 break
 
         if not best_centers or len(best_centers) < 3:
@@ -153,6 +156,7 @@ class VisionProcessor:
                 if len(centers) >= 3:
                     best_centers = centers
                     best_contours = None
+                    best_hierarchy = None
                     break
 
         if not best_centers or len(best_centers) < 3:
@@ -176,23 +180,33 @@ class VisionProcessor:
 
         estimated_BR = TR + BL - TL
 
+        # =======================================================
+        # アライメント補正 (内側黒四角の中心を取得するよう修正)
+        # =======================================================
         actual_alignment = None
-        if best_contours and self.config and hasattr(self.config, 'ALIGNMENT_POS') and self.config.ALIGNMENT_POS:
+        if best_contours is not None and best_hierarchy is not None and self.config and hasattr(self.config, 'ALIGNMENT_POS') and self.config.ALIGNMENT_POS:
             dist_x_px = np.linalg.norm(TR - TL)
             dist_y_px = np.linalg.norm(BL - TL)
             cell_size_px = ((dist_x_px + dist_y_px) / 2.0) / (self.grid_size - 7)
             search_radius = cell_size_px * 4 
 
-            for c in best_contours:
-                M = cv2.moments(c)
-                if M["m00"] != 0:
-                    cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
-                    if np.hypot(cx - estimated_BR[0], cy - estimated_BR[1]) < search_radius:
-                        if (np.hypot(cx - TL[0], cy - TL[1]) > search_radius and
-                            np.hypot(cx - TR[0], cy - TR[1]) > search_radius and
-                            np.hypot(cx - BL[0], cy - BL[1]) > search_radius):
-                            actual_alignment = [cx, cy]
-                            break
+            for i in range(len(best_contours)):
+                c1_idx = best_hierarchy[0][i][2]
+                if c1_idx != -1:
+                    c2_idx = best_hierarchy[0][c1_idx][2] # 孫要素（一番内側の黒四角）
+                    if c2_idx != -1:
+                        inner_contour = best_contours[c2_idx]
+                        M = cv2.moments(inner_contour)
+                        if M["m00"] != 0:
+                            cx, cy = M["m10"] / M["m00"], M["m01"] / M["m00"]
+                            # 推定BR座標に近いかチェック
+                            if np.hypot(cx - estimated_BR[0], cy - estimated_BR[1]) < search_radius:
+                                # ファインダパターン自身を誤検知しないよう除外
+                                if (np.hypot(cx - TL[0], cy - TL[1]) > search_radius and
+                                    np.hypot(cx - TR[0], cy - TR[1]) > search_radius and
+                                    np.hypot(cx - BL[0], cy - BL[1]) > search_radius):
+                                    actual_alignment = [cx, cy]
+                                    break
 
         gs, ts = self.grid_size, self.target_side
 
@@ -204,17 +218,14 @@ class VisionProcessor:
             base_name = os.path.basename(img_path).replace(".png", "")
             debug_img = img.copy()
             
-            # TL(赤), TR(緑), BL(青)
             cv2.circle(debug_img, tuple(map(int, TL)), 3, (0, 0, 255), -1)
             cv2.circle(debug_img, tuple(map(int, TR)), 3, (0, 255, 0), -1)
             cv2.circle(debug_img, tuple(map(int, BL)), 3, (255, 0, 0), -1)
             
             if actual_alignment:
-                # アライメント発見(マゼンタ)
                 cv2.circle(debug_img, tuple(map(int, actual_alignment)), 3, (255, 0, 255), -1)
                 cv2.polylines(debug_img, [np.int32([TL, TR, actual_alignment, BL])], True, (0, 255, 255), 1)
             else:
-                # 推測BR(水色)
                 cv2.circle(debug_img, tuple(map(int, estimated_BR)), 3, (255, 255, 0), -1)
                 cv2.polylines(debug_img, [np.int32([TL, TR, estimated_BR, BL])], True, (0, 255, 255), 1)
                 
