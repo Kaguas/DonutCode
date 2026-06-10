@@ -115,7 +115,7 @@ class Decoder:
         data_bytes = msg_bytes[:char_count] if 0 < char_count <= len(msg_bytes) else msg_bytes
         return data_bytes.rstrip(b'\x00').decode('ascii', errors='ignore')
     
-    def decode_image(self, img_path):
+    def decode_image(self, img_path: str|np.ndarray):
         try:
             square_img = self.vision.process(img_path, debug_mode=True)
             bit_map = self.image_to_bitmap(square_img)
