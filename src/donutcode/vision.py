@@ -253,7 +253,14 @@ class VisionProcessor:
         # =======================================================
         if debug_mode:
             os.makedirs("sample-result/debug", exist_ok=True)
-            base_name = os.path.basename(img_path).replace(".png", "")
+
+            #!#!# img_pathがstrでない場合の処理を追加
+            if type(img_path) != str:
+                print("[DonutCode Debug] Image path not provided. save with default name.")
+                base_name = "debug_img"
+            else:
+                base_name = os.path.basename(img_path).replace(".png", "")
+            
             debug_img = img.copy()
             
             # TL(赤), TR(緑), BL(青)
